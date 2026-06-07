@@ -1,0 +1,57 @@
+name: Sync upstream Keycloak
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Every Monday 06:00 UTC / 09:00 Türkiye time
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-upstream:
+    name: Sync Keycloak upstream into NextId-Core
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout NextId-Core
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "nextid-bot"
+          git config user.email "nextid-bot@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/keycloak/keycloak.git || true
+          git fetch upstream --tags
+
+      - name: Create sync branch
+        run: |
+          BRANCH="sync/keycloak-upstream-$(date +%Y%m%d)"
+          echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
+          git checkout main
+          git checkout -b "$BRANCH"
+
+      - name: Merge upstream main
+        run: |
+          git merge upstream/main --no-edit
+
+      - name: Push sync branch
+        run: |
+          git push origin "$BRANCH"
+
+      - name: Create pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Sync Keycloak upstream" \
+            --body "Automated sync from keycloak/keycloak upstream into NextId-Core main."
