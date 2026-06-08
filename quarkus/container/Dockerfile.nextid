@@ -1,0 +1,46 @@
+FROM registry.access.redhat.com/ubi9 AS nextid-rootfs
+
+RUN dnf install -y tar gzip && dnf clean all
+
+COPY keycloak-*.tar.gz /tmp/nextid-core.tar.gz
+RUN mkdir -p /tmp/nextid-core /opt/keycloak/data && \
+    tar -xzf /tmp/nextid-core.tar.gz -C /tmp/nextid-core && \
+    mv /tmp/nextid-core/keycloak-*/* /opt/keycloak/ && \
+    rm -rf /tmp/nextid-core /tmp/nextid-core.tar.gz && \
+    chmod -R g+rwX /opt/keycloak
+
+COPY ubi-null.sh /tmp/ubi-null.sh
+RUN bash /tmp/ubi-null.sh java-21-openjdk-headless glibc-langpack-en findutils
+
+FROM registry.access.redhat.com/ubi9-micro
+
+ARG NEXTID_CORE_VERSION=dev
+ARG NEXTID_CORE_REVISION=unknown
+
+ENV LANG=en_US.UTF-8 \
+    KC_RUN_IN_CONTAINER=true \
+    KC_HEALTH_ENABLED=true \
+    KC_METRICS_ENABLED=true \
+    KC_DB=postgres
+
+COPY --from=nextid-rootfs /tmp/null/rootfs/ /
+COPY --from=nextid-rootfs --chown=1000:0 /opt/keycloak /opt/keycloak
+
+RUN echo "nextid:x:0:root" >> /etc/group && \
+    echo "nextid:x:1000:0:NextId Core:/opt/keycloak:/sbin/nologin" >> /etc/passwd
+
+USER 1000
+WORKDIR /opt/keycloak
+
+RUN /opt/keycloak/bin/kc.sh build
+
+EXPOSE 8080 8443 9000
+
+LABEL org.opencontainers.image.title="NextId-Core" \
+      org.opencontainers.image.description="NextId identity and access management core" \
+      org.opencontainers.image.vendor="NextLife" \
+      org.opencontainers.image.source="https://github.com/muratdelen/NextId-Core" \
+      org.opencontainers.image.version="${NEXTID_CORE_VERSION}" \
+      org.opencontainers.image.revision="${NEXTID_CORE_REVISION}"
+
+ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
