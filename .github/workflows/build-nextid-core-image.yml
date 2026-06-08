@@ -32,6 +32,9 @@ jobs:
       - name: Restore Maven cache
         uses: ./.github/actions/maven-cache
 
+      - name: Set NextId-Core release version
+        run: ./set-version.sh "${NEXTID_CORE_VERSION}"
+
       - name: Build NextId-Core distribution
         run: |
           ./mvnw install -Pdistribution -am \
